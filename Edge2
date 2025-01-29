@@ -1,0 +1,92 @@
+from selenium import webdriver
+from selenium.webdriver.edge.service import Service
+from selenium.webdriver.edge.options import Options
+from selenium.webdriver.common.by import By
+from selenium.common.exceptions import NoSuchElementException, TimeoutException
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+import time
+from openpyxl import Workbook
+
+# Dictionary with keys and multiple values
+data = {
+    "key1": ["G008020919"],
+    "key2": ["060062363"],
+    "key1": ["1234421"]
+}
+
+# Configure Edge options
+edge_options = Options()
+edge_options.add_experimental_option("debuggerAddress", "127.0.0.1:9222")
+
+# Initialize Edge driver
+driver = webdriver.Edge(options=edge_options)
+
+# Initialize results list
+results = []
+
+def check_element_presence(driver, class_name):
+    """Helper function to check element presence and print page source for debugging"""
+    try:
+        # Wait up to 10 seconds for element to be present
+        element = WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.CLASS_NAME, class_name))
+        )
+        print(f"Found element with class: {class_name}")
+        return True
+    except TimeoutException:
+        print(f"Could not find element with class: {class_name}")
+        # Print part of the page source for debugging
+        print("Page source snippet:")
+        print(driver.page_source[:1000])  # Print first 1000 characters
+        return False
+
+try:
+    for key, values in data.items():
+        for value in values:
+            url = f"https://direct.asda.com/george/clothing/10,default,sc.html?q={value}"
+            print(f"\nChecking URL: {url}")
+            driver.get(url)
+            
+            # Wait for page to load completely
+            time.sleep(3)  # Add a static delay
+            
+            # Check for elements and print debugging info
+            searchfail_exists = check_element_presence(driver, "searchfail_text")
+            minicontainer_exists = check_element_presence(driver, "mini-container")
+            
+            if searchfail_exists:
+                results.append((key, value, "Not present in website"))
+                print(f"Result for {value}: Not present in website")
+            elif minicontainer_exists:
+                results.append((key, value, "Present in website"))
+                print(f"Result for {value}: Present in website")
+            else:
+                # Print all class names on the page for debugging
+                print("All classes found on page:")
+                elements = driver.find_elements(By.XPATH, "//*[@class]")
+                classes = [element.get_attribute("class") for element in elements]
+                print(set(classes))  # Print unique class names
+                
+                results.append((key, value, "Neither 'searchfail_text' nor 'mini-container' found"))
+                print(f"Result for {value}: Neither class found")
+            
+            time.sleep(2)  # Add delay between requests
+
+finally:
+    # Save results to an Excel file
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Search Results"
+    
+    # Write header row
+    ws.append(["Key", "Value", "Status"])
+    
+    # Write data rows
+    for key, value, status in results:
+        ws.append([key, value, status])
+    
+    # Save the Excel file
+    output_file = "search_results.xlsx"
+    wb.save(output_file)
+    print(f"\nResults saved to {output_file}")
